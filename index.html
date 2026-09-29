@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
+<title>Jen's Poker Trainer</title>
+<style>
+  :root{
+    --bg:#0d2b22; --felt:#146047; --panel:#10241f; --ink:#f7f4ec; --muted:#b8c7c1;
+    --accent:#f0c36a; --danger:#ff7b7b; --ok:#8ee0a5; --card:#fff; --black:#111;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:linear-gradient(180deg,#081b16,#0d2b22 45%,#081b16);color:var(--ink);
+       font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",sans-serif;min-height:100vh}
+  .app{max-width:980px;margin:0 auto;padding:12px 12px calc(22px + env(safe-area-inset-bottom))}
+  .top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+  h1{font-size:18px;margin:0}.small{font-size:12px;color:var(--muted)}
+  button{border:0;border-radius:12px;padding:12px 14px;font-weight:700;font-size:15px}
+  .ghost{background:#24463b;color:#fff}.accent{background:var(--accent);color:#2d2414}
+  .danger{background:#6b3030;color:#fff}.ok{background:#2b6748;color:#fff}
+  .table{background:radial-gradient(circle at 50% 40%,#1b7758,#11523d 62%,#0f4735);
+         border:8px solid #6e4b2f;border-radius:38px;padding:16px;box-shadow:0 15px 35px #0008 inset,0 12px 28px #0007}
+  .seat{background:#0c211cbb;border:1px solid #ffffff22;border-radius:16px;padding:10px;min-height:82px}
+  .seat.active{outline:2px solid var(--accent)} .seat.folded{opacity:.48}
+  .row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}.row.one{grid-template-columns:1fr}
+  .name{font-weight:800;font-size:14px}.chips{font-size:12px;color:var(--muted);margin-top:2px}
+  .cards{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+  .card{width:42px;height:58px;background:var(--card);color:var(--black);border-radius:8px;padding:5px 4px;
+        display:flex;flex-direction:column;justify-content:space-between;font-weight:900;
+        box-shadow:0 3px 7px #0005;border:1px solid #ddd}
+  .card.red{color:#d11f37}.back{background:linear-gradient(135deg,#202a77,#4654c9);color:#fff;justify-content:center;align-items:center;border:2px solid #fff}
+  .center{text-align:center;padding:14px 6px}.pot{font-weight:900;font-size:16px;color:var(--accent)}
+  .board{justify-content:center;margin:10px 0}.status{font-size:13px;color:#fff;min-height:42px;margin-top:8px}
+  .player{margin-top:10px}.actions{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px}
+  .actions button{padding:13px 8px}.wide{grid-column:1/-1}
+  .raise{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;margin-top:8px}
+  input[type=range]{width:100%}
+  .coach{margin-top:10px;background:#0a1714;border:1px solid #ffffff22;border-radius:14px;padding:12px;font-size:13px;line-height:1.45}
+  .coach b{color:var(--accent)}
+  .log{margin-top:10px;background:#091713;border-radius:14px;padding:10px;max-height:160px;overflow:auto;font-size:12px;color:#d4dfdb}
+  .pill{display:inline-block;background:#ffffff16;border-radius:999px;padding:4px 8px;font-size:11px;margin-left:4px}
+  .winner{color:#ffdc84;font-weight:900}
+  @media (max-width:700px){
+    .app{padding-left:8px;padding-right:8px}.table{border-width:5px;border-radius:28px;padding:10px}
+    .row{grid-template-columns:1fr 1fr}.row .seat:last-child{grid-column:1/-1}
+    .card{width:38px;height:54px}.seat{min-height:78px}.actions{grid-template-columns:1fr 1fr}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="top">
+    <div><h1>♠ Jen's Poker Trainer</h1><div class="small">Texas Hold'em · 1v3 AI · Coach Mode</div></div>
+    <button id="newGame" class="ghost">重新开局</button>
+  </div>
+
+  <div class="table">
+    <div class="row" id="opponents"></div>
+
+    <div class="center">
+      <div class="pot" id="pot">Pot: 0</div>
+      <div class="small" id="stage">等待开局</div>
+      <div class="cards board" id="board"></div>
+      <div class="status" id="status">点击「发牌」开始。</div>
+      <button id="dealBtn" class="accent">发牌</button>
+    </div>
+
+    <div class="seat player" id="playerSeat">
+      <div class="name">You <span class="pill" id="position"></span></div>
+      <div class="chips">筹码：<span id="myChips">1000</span> · 本轮投入：<span id="myBet">0</span></div>
+      <div class="cards" id="myCards"></div>
+    </div>
+
+    <div class="actions" id="actions" style="display:none">
+      <button id="foldBtn" class="danger">Fold</button>
+      <button id="checkBtn" class="ghost">Check</button>
+      <button id="callBtn" class="ok">Call</button>
+      <button id="raiseBtn" class="accent">Raise</button>
+    </div>
+    <div class="raise" id="raiseBox" style="display:none">
+      <input id="raiseRange" type="range" min="20" max="500" step="10" value="60">
+      <button id="raiseConfirm" class="accent">Raise to <span id="raiseValue">60</span></button>
+    </div>
+
+    <div class="coach" id="coach"><b>Coach：</b>打一手之后，我会告诉你关键决策是否合理。</div>
+    <div class="log" id="log"></div>
+  </div>
+</div>
+
+<script>
+const SUITS=['♠','♥','♦','♣'], RANKS=[2,3,4,5,6,7,8,9,10,11,12,13,14];
+const rankText=r=>({11:'J',12:'Q',13:'K',14:'A'}[r]||r);
+const players=[
+  {name:'You',chips:1000,isHuman:true},
+  {name:'Mia · TAG',chips:1000,style:'tag'},
+  {name:'Leo · LAG',chips:1000,style:'lag'},
+  {name:'Noah · Nit',chips:1000,style:'nit'}
+];
+let deck=[],board=[],pot=0,stage=0,dealer=0,current=0,highestBet=0,handOver=true,acted=new Set(),handHistory=[];
+const stageNames=['Pre-flop','Flop','Turn','River','Showdown'];
+
+function newDeck(){let d=[];for(const s of SUITS)for(const r of RANKS)d.push({r,s});return shuffle(d)}
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+function cardHTML(c,hidden=false){
+  if(hidden)return `<div class="card back">★</div>`;
+  const red=c.s==='♥'||c.s==='♦';return `<div class="card ${red?'red':''}"><span>${rankText(c.r)}</span><span style="font-size:22px">${c.s}</span></div>`
+}
+function log(t){document.getElementById('log').innerHTML=`<div>${t}</div>`+document.getElementById('log').innerHTML}
+function resetBets(){players.forEach(p=>p.bet=0);highestBet=0;acted=new Set()}
+function activePlayers(){return players.filter(p=>!p.folded&&p.chips>=0)}
+function notFolded(){return players.filter(p=>!p.folded)}
+
+function startHand(){
+  if(players.filter(p=>p.chips>0).length<2){resetGame();return}
+  deck=newDeck();board=[];pot=0;stage=0;handOver=false;handHistory=[];
+  players.forEach(p=>{p.folded=p.chips<=0;p.allin=false;p.bet=0;p.hand=[]});
+  for(let k=0;k<2;k++)for(const p of players)if(!p.folded)p.hand.push(deck.pop());
+  dealer=(dealer+1)%4;
+  while(players[dealer].folded)dealer=(dealer+1)%4;
+  resetBets();
+  const sb=nextActive(dealer), bb=nextActive(sb);
+  postBlind(sb,10,'SB'); postBlind(bb,20,'BB');
+  highestBet=20; current=nextActive(bb); acted=new Set([sb,bb]);
+  log(`<b>新一手</b> · Dealer: ${players[dealer].name}`);
+  render(); proceedUntilHuman();
+}
+function nextActive(i){let j=i;for(let k=0;k<4;k++){j=(j+1)%4;if(!players[j].folded&&!players[j].allin)return j}return i}
+function postBlind(i,amt,label){let a=Math.min(amt,players[i].chips);players[i].chips-=a;players[i].bet+=a;pot+=a;if(players[i].chips===0)players[i].allin=true;log(`${players[i].name} posts ${label} ${a}`)}
+
+function proceedUntilHuman(){
+  if(handOver)return;
+  if(notFolded().length===1){awardLast();return}
+  if(roundComplete()){advanceStage();return}
+  const p=players[current];
+  if(p.folded||p.allin){current=nextActive(current);setTimeout(proceedUntilHuman,120);return}
+  render();
+  if(p.isHuman){showActions();return}
+  hideActions(); setTimeout(()=>{aiAct(current);current=nextActive(current);render();proceedUntilHuman()},380);
+}
+function roundComplete(){
+  const live=players.filter(p=>!p.folded&&!p.allin);
+  if(live.length===0)return true;
+  return live.every(p=>acted.has(players.indexOf(p)) && p.bet===highestBet);
+}
+function advanceStage(){
+  if(stage===0){board.push(deck.pop(),deck.pop(),deck.pop());stage=1}
+  else if(stage===1){board.push(deck.pop());stage=2}
+  else if(stage===2){board.push(deck.pop());stage=3}
+  else {showdown();return}
+  resetBets();
+  current=nextActive(dealer);
+  log(`<b>${stageNames[stage]}</b>`);
+  render(); proceedUntilHuman();
+}
+function awardLast(){
+  const w=notFolded()[0];w.chips+=pot;log(`<span class="winner">${w.name} wins ${pot}</span>`);coachEnd(w);pot=0;handOver=true;renderEnd();
+}
+function showdown(){
+  stage=4;
+  const live=notFolded();
+  let scored=live.map(p=>({p,score:evaluate7([...p.hand,...board])}));
+  scored.sort((a,b)=>compareScore(b.score,a.score));
+  const best=scored[0].score;
+  const winners=scored.filter(x=>compareScore(x.score,best)===0).map(x=>x.p);
+  const share=Math.floor(pot/winners.length); winners.forEach(w=>w.chips+=share);
+  log(`<span class="winner">${winners.map(w=>w.name).join(' & ')} win ${share}${winners.length>1?' each':''}</span>`);
+  live.forEach(p=>log(`${p.name}: ${handName(evaluate7([...p.hand,...board]))}`));
+  coachEnd(winners.includes(players[0])?players[0]:winners[0]);pot=0;handOver=true;renderEnd();
+}
+function compareScore(a,b){for(let i=0;i<a.length;i++){if(a[i]!==b[i])return a[i]-b[i]}return 0}
+function evaluate7(cards){
+  let best=null;
+  for(let a=0;a<7;a++)for(let b=a+1;b<7;b++){const five=cards.filter((_,i)=>i!==a&&i!==b);const s=evaluate5(five);if(!best||compareScore(s,best)>0)best=s}
+  return best
+}
+function evaluate5(cs){
+  let rs=cs.map(c=>c.r).sort((a,b)=>b-a),counts={};rs.forEach(r=>counts[r]=(counts[r]||0)+1);
+  const flush=cs.every(c=>c.s===cs[0].s);
+  let uniq=[...new Set(rs)]; if(uniq[0]===14)uniq.push(1);
+  let straightHigh=0;for(let i=0;i<=uniq.length-5;i++)if(uniq[i]-uniq[i+4]===4){straightHigh=uniq[i];break}
+  if(flush&&straightHigh)return [8,straightHigh];
+  let groups=Object.entries(counts).map(([r,n])=>[+r,n]).sort((a,b)=>b[1]-a[1]||b[0]-a[0]);
+  if(groups[0][1]===4)return [7,groups[0][0],groups[1][0]];
+  if(groups[0][1]===3&&groups[1][1]>=2)return [6,groups[0][0],groups[1][0]];
+  if(flush)return [5,...rs];
+  if(straightHigh)return [4,straightHigh];
+  if(groups[0][1]===3)return [3,groups[0][0],...groups.filter(g=>g[1]===1).map(g=>g[0]).sort((a,b)=>b-a)];
+  let pairs=groups.filter(g=>g[1]===2).map(g=>g[0]).sort((a,b)=>b-a);
+  if(pairs.length>=2){let kick=groups.find(g=>g[1]===1)[0];return [2,pairs[0],pairs[1],kick]}
+  if(pairs.length===1)return [1,pairs[0],...groups.filter(g=>g[1]===1).map(g=>g[0]).sort((a,b)=>b-a)];
+  return [0,...rs]
+}
+function handName(s){return ['High Card','One Pair','Two Pair','Three of a Kind','Straight','Flush','Full House','Four of a Kind','Straight Flush'][s[0]]}
+
+function preflopStrength(h){
+  const [a,b]=h.sort((x,y)=>y.r-x.r);let v=(a.r+b.r)/28;
+  if(a.r===b.r)v+=.28;if(a.s===b.s)v+=.08;if(Math.abs(a.r-b.r)<=2)v+=.06;if(a.r>=13)v+=.08;return Math.min(1,v)
+}
+function roughStrength(p){
+  if(stage===0)return preflopStrength([...p.hand]);
+  const s=evaluate7([...p.hand,...board]);
+  return Math.min(1,(s[0]/8)*.75 + (s[1]||0)/14*.25)
+}
+function aiAct(i){
+  const p=players[i],call=Math.max(0,highestBet-p.bet),str=roughStrength(p),r=Math.random();
+  let aggr=p.style==='lag'?.16:p.style==='tag'?.06:-.05;
+  let tight=p.style==='nit'?.13:p.style==='tag'?.05:-.02;
+  if(call>0 && str+tight<.34 && r<.78){p.folded=true;acted.add(i);log(`${p.name} folds`);return}
+  if((str+aggr>.62&&r<.58)||(call===0&&r<.14+aggr)){let to=Math.min(p.bet+call+Math.max(20,Math.round((pot*.45+20)/10)*10),p.bet+p.chips);doRaise(i,to);return}
+  if(call===0){acted.add(i);log(`${p.name} checks`);return}
+  doCall(i)
+}
+function doCall(i){
+  const p=players[i],need=Math.max(0,highestBet-p.bet),a=Math.min(need,p.chips);p.chips-=a;p.bet+=a;pot+=a;if(p.chips===0)p.allin=true;acted.add(i);
+  log(`${p.name} ${need===0?'checks':'calls '+a}`)
+}
+function doRaise(i,to){
+  const p=players[i];to=Math.max(to,highestBet+20);to=Math.min(to,p.bet+p.chips);let add=to-p.bet;
+  p.chips-=add;p.bet=to;pot+=add;highestBet=Math.max(highestBet,to);if(p.chips===0)p.allin=true;
+  acted=new Set([i]);log(`${p.name} raises to ${to}`)
+}
+
+function playerAction(type){
+  if(handOver||current!==0)return;
+  const p=players[0],call=Math.max(0,highestBet-p.bet),before=roughStrength(p);
+  if(type==='fold'){p.folded=true;acted.add(0);handHistory.push({stage,type,str:before,call,pot});log('You fold')}
+  if(type==='check'){acted.add(0);handHistory.push({stage,type,str:before,call,pot});log('You check')}
+  if(type==='call'){doCall(0);handHistory.push({stage,type,str:before,call,pot})}
+  if(type==='raise'){document.getElementById('raiseBox').style.display='grid';return}
+  hideActions();current=nextActive(0);render();proceedUntilHuman()
+}
+function confirmRaise(){
+  let to=+document.getElementById('raiseRange').value;let str=roughStrength(players[0]),call=Math.max(0,highestBet-players[0].bet);
+  doRaise(0,to);handHistory.push({stage,type:'raise',str,call,pot});
+  document.getElementById('raiseBox').style.display='none';hideActions();current=nextActive(0);render();proceedUntilHuman()
+}
+function showActions(){
+  document.getElementById('actions').style.display='grid';
+  const call=Math.max(0,highestBet-players[0].bet);
+  document.getElementById('checkBtn').style.display=call===0?'block':'none';
+  document.getElementById('callBtn').style.display=call>0?'block':'none';
+  document.getElementById('callBtn').textContent=`Call ${call}`;
+  const min=Math.max(highestBet+20,20),max=players[0].chips+players[0].bet;
+  const rr=document.getElementById('raiseRange');rr.min=Math.min(min,max);rr.max=max;rr.value=Math.min(Math.max(min,Math.round((highestBet+pot*.5)/10)*10),max);
+  document.getElementById('raiseValue').textContent=rr.value;
+}
+function hideActions(){document.getElementById('actions').style.display='none';document.getElementById('raiseBox').style.display='none'}
+
+function coachEnd(w){
+  let txt='这一手没有需要特别指出的明显错误。';
+  if(handHistory.length){
+    const bad=handHistory.find(x=>x.type==='fold'&&x.str>.68) || handHistory.find(x=>x.type==='call'&&x.call>x.pot*.7&&x.str<.35);
+    const strongPassive=handHistory.find(x=>(x.type==='call'||x.type==='check')&&x.str>.78);
+    if(bad?.type==='fold')txt='你有一次在牌力较强时选择了 Fold，可能偏紧。下次可以更多考虑 Call / Raise。';
+    else if(bad?.type==='call')txt='你有一次在牌力偏弱、且跟注成本较高时继续 Call，可能偏松。注意 pot odds。';
+    else if(strongPassive)txt='你有一次牌力很强但选择了较被动的线路，可以考虑更积极地下注或加注来获取价值。';
+    else{
+      const pf=handHistory.find(x=>x.stage===0);
+      if(pf&&pf.type==='raise')txt='Pre-flop 主动 Raise 是不错的选择；继续观察翻牌后的牌面结构与对手下注尺度。';
+      else if(pf&&pf.type==='fold'&&pf.str<.35)txt='Pre-flop 弱牌及时 Fold 很标准，减少边缘牌带来的亏损。';
+    }
+  }
+  document.getElementById('coach').innerHTML=`<b>Coach：</b>${txt}<br><span class="small">提示：这个教练是启发式训练，不是 GTO solver。</span>`;
+}
+
+function render(){
+  document.getElementById('pot').textContent=`Pot: ${pot}`;
+  document.getElementById('stage').textContent=stageNames[stage]||'';
+  document.getElementById('board').innerHTML=board.map(c=>cardHTML(c)).join('');
+  document.getElementById('myCards').innerHTML=(players[0].hand||[]).map(c=>cardHTML(c)).join('');
+  document.getElementById('myChips').textContent=players[0].chips;
+  document.getElementById('myBet').textContent=players[0].bet||0;
+  document.getElementById('position').textContent=dealer===0?'BTN':'';
+  document.getElementById('opponents').innerHTML=players.slice(1).map((p,idx)=>{
+    const i=idx+1,show=handOver&&!p.folded;
+    return `<div class="seat ${current===i&&!handOver?'active':''} ${p.folded?'folded':''}">
+      <div class="name">${p.name}</div><div class="chips">筹码：${p.chips} · 本轮：${p.bet||0}</div>
+      <div class="cards">${(p.hand||[]).map(c=>cardHTML(c,!show)).join('')}</div></div>`
+  }).join('');
+  document.getElementById('playerSeat').className=`seat player ${current===0&&!handOver?'active':''} ${players[0].folded?'folded':''}`;
+  document.getElementById('status').textContent=handOver?'本手结束。':'轮到 '+players[current].name;
+  document.getElementById('dealBtn').style.display=handOver?'inline-block':'none';
+}
+function renderEnd(){hideActions();render();document.getElementById('status').textContent='本手结束，点击「发牌」继续。'}
+function resetGame(){players.forEach(p=>{p.chips=1000;p.bet=0;p.folded=false;p.hand=[]});dealer=0;pot=0;board=[];handOver=true;document.getElementById('log').innerHTML='';document.getElementById('coach').innerHTML='<b>Coach：</b>打一手之后，我会告诉你关键决策是否合理。';render()}
+document.getElementById('dealBtn').onclick=startHand;
+document.getElementById('newGame').onclick=resetGame;
+document.getElementById('foldBtn').onclick=()=>playerAction('fold');
+document.getElementById('checkBtn').onclick=()=>playerAction('check');
+document.getElementById('callBtn').onclick=()=>playerAction('call');
+document.getElementById('raiseBtn').onclick=()=>playerAction('raise');
+document.getElementById('raiseConfirm').onclick=confirmRaise;
+document.getElementById('raiseRange').oninput=e=>document.getElementById('raiseValue').textContent=e.target.value;
+resetGame();
+</script>
+</body>
+</html>
